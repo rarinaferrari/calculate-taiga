@@ -1,0 +1,138 @@
+version: "3.9"
+
+services:
+  taiga:
+    image: nginx:1-alpine
+    volumes:
+      - ./static:/taiga/static
+      - ./media:/taiga/media
+    ports:
+      - "9000:80"
+    env_file: .env.test
+    depends_on:
+      - frontend
+      - backend
+      - events
+    networks:
+      - local
+    restart: unless-stopped
+
+  frontend:
+    image: taigaio/taiga-front
+    env_file: .env.test
+    networks:
+      - local
+    restart: unless-stopped
+
+  backend:
+    image: taigaio/taiga-back
+    volumes:
+      - ./static:/taiga-back/static
+      - ./media:/taiga-back/media
+    env_file:
+      - .env.test
+      - .env.backend
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      events-rabbitmq:
+        condition: service_healthy
+      async-rabbitmq:
+        condition: service_healthy
+    networks:
+      - local
+    restart: unless-stopped
+  
+  protected:
+    image: taigaio/taiga-protected
+    env_file: .env.test
+    networks:
+      - local
+    restart: unless-stopped
+
+  async:
+    image: taigaio/taiga-back
+    entrypoint: ["/taiga-back/docker/async_entrypoint.sh"]
+    volumes:
+      - ./static:/taiga-back/static
+      - ./media:/taiga-back/media
+    env_file: .env.test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      events-rabbitmq:
+        condition: service_healthy
+      async-rabbitmq:
+        condition: service_healthy
+    networks:
+      - local
+    restart: unless-stopped
+
+  async-rabbitmq:
+    image: rabbitmq:3.8-management-alpine
+    volumes:
+      - ./async-rabbitmq:/var/lib/rabbitmq
+    env_file: .env.test
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 2s
+      timeout: 15s
+      retries: 5
+      start_period: 3s
+    hostname: "taiga-async-rabbitmq"
+    networks:
+      - local
+    restart: unless-stopped
+
+  events:
+    image: taigaio/taiga-events
+    env_file: .env.test
+    depends_on:
+      events-rabbitmq:
+        condition: service_healthy
+    networks:
+      - local
+    restart: unless-stopped
+
+  events-rabbitmq:
+    image: rabbitmq:3.8-management-alpine
+    volumes:
+      - ./events-rabbitmq:/var/lib/rabbitmq
+    env_file: .env.test
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 2s
+      timeout: 15s
+      retries: 5
+      start_period: 3s
+    hostname: "taiga-events-rabbitmq"
+    networks:
+      - local
+    restart: unless-stopped
+
+  postgres-test:
+    image: postgres:12-alpine
+    volumes:
+      - ./postgres-12:/var/lib/postgresql/data
+    env_file: .env.test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 2s
+      timeout: 15s
+      retries: 5
+      start_period: 3s
+    networks:
+      - local
+    restart: unless-stopped
+
+  calculate:
+    image:  ${CI_REGISTRY_IMAGE}:latest
+    env_file: .env.test
+    networks:
+      - local
+    depends_on:
+      - taiga
+
+networks:
+  local:
+

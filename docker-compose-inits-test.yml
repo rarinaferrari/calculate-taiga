@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  manage:
+    image: taigaio/taiga-back
+    environment:
+      CELERY_ENABLED: "False"
+    env_file: .env.test
+    depends_on:
+      - postgres-test
+    entrypoint: "python manage.py"
+    volumes:
+      - ./static:/taiga-back/static
+      - ./media:/taiga-back/media
+    networks:
+      - local
